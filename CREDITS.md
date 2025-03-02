@@ -1,7 +1,6 @@
 # Credits
 
 - **Author**: Niks
-- **Contributors**: [List of contributors]
 
 Special thanks to the GNOME community for their support and resources.
 

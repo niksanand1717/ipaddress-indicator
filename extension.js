@@ -103,13 +103,13 @@ const Indicator = GObject.registerClass(
               }
             } catch (e) {
               this.label.set_text("Error");
-              log(`Error fetching IP: ${e.message}`);
+              console.log(`Error fetching IP: ${e.message}`);
             }
           }
         );
       } catch (e) {
         this.label.set_text("Error");
-        log(`Error setting up request: ${e.message}`);
+        console.log(`Error setting up request: ${e.message}`);
       }
     }
 

@@ -1,0 +1,6 @@
+{
+  "name": "IP Address Extension",
+  "description": "Shows Current Public IP Address of the system",
+  "uuid": "niksanand1717@github.com",
+  "shell-version": ["46"]
+}

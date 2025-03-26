@@ -1,6 +1,9 @@
 {
   "name": "IP Address Extension",
-  "description": "Shows Current Public IP Address of the system",
+  "description": "Shows Current Public IP Address of the system uses ipify API",
   "uuid": "niksanand1717@github.com",
+  "version": "1.0.0",
+  "author": "niksanand1717",
+  "url": "https://github.com/niksanand1717/ipaddress-indicator",
   "shell-version": ["46"]
 }

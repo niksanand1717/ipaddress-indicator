@@ -42,7 +42,7 @@ const Indicator = GObject.registerClass(
       this.label = new St.Label({
         text: _("Loading..."),
         y_align: Clutter.ActorAlign.CENTER,
-        style_class: "system-status-icon",
+        style_class: "ip-indicator-label",
       });
 
       this.add_child(this.label);

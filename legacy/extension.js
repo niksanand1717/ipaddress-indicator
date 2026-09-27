@@ -1,4 +1,4 @@
-/* extension.js
+/* extension.js (legacy build for GNOME Shell 40 - 44)
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,20 +16,23 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-import GObject from "gi://GObject";
-import St from "gi://St";
-import Gio from "gi://Gio";
-import GLib from "gi://GLib";
-import Clutter from "gi://Clutter";
-import Soup from "gi://Soup";
+/* exported init */
 
-import {
-  Extension,
-  gettext as _,
-} from "resource:///org/gnome/shell/extensions/extension.js";
-import * as PanelMenu from "resource:///org/gnome/shell/ui/panelMenu.js";
-import * as PopupMenu from "resource:///org/gnome/shell/ui/popupMenu.js";
-import * as Main from "resource:///org/gnome/shell/ui/main.js";
+const { GObject, St, Gio, GLib, Clutter, Soup } = imports.gi;
+const ByteArray = imports.byteArray;
+
+const ExtensionUtils = imports.misc.extensionUtils;
+const Main = imports.ui.main;
+const PanelMenu = imports.ui.panelMenu;
+const PopupMenu = imports.ui.popupMenu;
+
+const Me = ExtensionUtils.getCurrentExtension();
+const _ = imports.gettext.gettext;
+
+const IP_URL = "https://api.ipify.org";
+
+// GNOME Shell 40-42 ship libsoup 2.4, GNOME 43+ ships libsoup 3
+const SOUP3 = Soup.MAJOR_VERSION >= 3;
 
 const Indicator = GObject.registerClass(
   class Indicator extends PanelMenu.Button {
@@ -84,43 +87,72 @@ const Indicator = GObject.registerClass(
     _updateIP() {
       this.label.set_text(_("Loading...")); // Show loading state
 
-      // Cancel any request still in flight before starting a new one
-      this._cancellable?.cancel();
-      this._cancellable = new Gio.Cancellable();
-
       try {
-        const message = Soup.Message.new("GET", "https://api.ipify.org");
+        const message = Soup.Message.new("GET", IP_URL);
 
-        this._httpSession.send_and_read_async(
-          message,
-          GLib.PRIORITY_DEFAULT,
-          this._cancellable,
-          (session, result) => {
-            try {
-              const bytes = session.send_and_read_finish(result);
-              if (message.get_status() !== Soup.Status.OK) {
-                this.label.set_text(_("Error"));
-                console.log(`Error fetching IP: HTTP ${message.get_status()}`);
-              } else if (bytes) {
-                const decoder = new TextDecoder("utf-8");
-                const ip = decoder.decode(bytes.get_data()).trim();
-                this.label.set_text(ip);
-              } else {
-                this.label.set_text(_("No IP"));
-              }
-            } catch (e) {
-              // Request was cancelled (refresh or extension disabled)
-              if (e.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
-                return;
-              this.label.set_text(_("Error"));
-              console.log(`Error fetching IP: ${e.message}`);
-            }
-          }
-        );
+        if (SOUP3) this._fetchSoup3(message);
+        else this._fetchSoup2(message);
       } catch (e) {
         this.label.set_text(_("Error"));
-        console.log(`Error setting up request: ${e.message}`);
+        log(`Error setting up request: ${e.message}`);
       }
+    }
+
+    _fetchSoup3(message) {
+      // Cancel any request still in flight before starting a new one
+      if (this._cancellable) this._cancellable.cancel();
+      this._cancellable = new Gio.Cancellable();
+
+      this._httpSession.send_and_read_async(
+        message,
+        GLib.PRIORITY_DEFAULT,
+        this._cancellable,
+        (session, result) => {
+          try {
+            const bytes = session.send_and_read_finish(result);
+            if (message.get_status() !== Soup.Status.OK)
+              this._setError(`HTTP ${message.get_status()}`);
+            else if (bytes)
+              this._setIP(ByteArray.toString(bytes.get_data()));
+            else this.label.set_text(_("No IP"));
+          } catch (e) {
+            // Request was cancelled (refresh or extension disabled)
+            if (e.matches && e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+              return;
+            this._setError(e.message);
+          }
+        }
+      );
+    }
+
+    _fetchSoup2(message) {
+      // Cancel any request still in flight before starting a new one
+      if (this._pendingMessage)
+        this._httpSession.cancel_message(
+          this._pendingMessage,
+          Soup.Status.CANCELLED
+        );
+      this._pendingMessage = message;
+
+      this._httpSession.queue_message(message, (session, msg) => {
+        if (msg.status_code === Soup.Status.CANCELLED) return;
+        this._pendingMessage = null;
+
+        if (msg.status_code !== Soup.Status.OK)
+          this._setError(`HTTP ${msg.status_code}`);
+        else if (msg.response_body.data)
+          this._setIP(msg.response_body.data);
+        else this.label.set_text(_("No IP"));
+      });
+    }
+
+    _setIP(text) {
+      this.label.set_text(text.trim());
+    }
+
+    _setError(reason) {
+      this.label.set_text(_("Error"));
+      log(`Error fetching IP: ${reason}`);
     }
 
     destroy() {
@@ -144,14 +176,18 @@ const Indicator = GObject.registerClass(
   }
 );
 
-export default class IPAddressExtension extends Extension {
+class IPAddressExtension {
   enable() {
     this._indicator = new Indicator();
-    Main.panel.addToStatusArea(this.uuid, this._indicator, -999, "left");
+    Main.panel.addToStatusArea(Me.uuid, this._indicator, -999, "left");
   }
 
   disable() {
     this._indicator.destroy();
     this._indicator = null;
   }
+}
+
+function init() {
+  return new IPAddressExtension();
 }
